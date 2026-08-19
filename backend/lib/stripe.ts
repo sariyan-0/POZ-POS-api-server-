@@ -23,6 +23,10 @@ export function getStripeClient(): Stripe {
   return stripeClient;
 }
 
+export function setStripeClientForTesting(client: Stripe | null): void {
+  stripeClient = client;
+}
+
 export async function verifyStripeConnection(): Promise<{
   connected: true;
   livemode: boolean;

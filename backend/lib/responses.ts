@@ -2,8 +2,10 @@ import type { VercelResponse } from "@vercel/node";
 
 export type ApiErrorCode =
   | "BAD_REQUEST"
+  | "IN_PERSON_REFUND_REQUIRED"
   | "METHOD_NOT_ALLOWED"
   | "STRIPE_PAYMENT_INTENT_ERROR"
+  | "STRIPE_REFUND_ERROR"
   | "STRIPE_UNAVAILABLE"
   | "SERVER_MISCONFIGURED"
   | "UNAUTHORIZED";

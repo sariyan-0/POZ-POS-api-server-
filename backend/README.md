@@ -11,6 +11,7 @@ First backend version for the PowersOfZeroPOS mobile frontend.
 - `GET /api/terminal/locations` protected by `Authorization: Bearer <POS_API_KEY>`
 - `POST /api/terminal/locations` protected by `Authorization: Bearer <POS_API_KEY>`
 - `POST /api/payments/create-intent` protected by `Authorization: Bearer <POS_API_KEY>`
+- `POST /api/payments/refund` protected by `Authorization: Bearer <POS_API_KEY>`
 - Consistent typed JSON success and error responses
 - Minimal dependency footprint
 
@@ -28,6 +29,7 @@ STRIPE_SECRET_KEY=sk_test_replace_with_your_stripe_test_secret_key
 ```bash
 cd backend
 npm install
+npm test
 npm run typecheck
 ```
 
@@ -139,6 +141,52 @@ Example request body:
   "amount": 100,
   "currency": "cad",
   "idempotencyKey": "sale-attempt-001"
+}
+```
+
+### `POST /api/payments/refund`
+
+Use this endpoint for server-side refunds of completed non-Interac Terminal payments.
+Interac refunds in Canada must be handled in person with Stripe Terminal and the original card.
+
+Example request body:
+
+```json
+{
+  "paymentIntentId": "pi_123abc",
+  "amount": 100,
+  "idempotencyKey": "refund-attempt-001"
+}
+```
+
+The `amount` field is optional. If omitted, the backend requests a full refund.
+
+Success response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "refund": {
+      "id": "re_...",
+      "paymentIntentId": "pi_123abc",
+      "amount": 100,
+      "currency": "cad",
+      "status": "succeeded"
+    }
+  }
+}
+```
+
+Interac response:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "IN_PERSON_REFUND_REQUIRED",
+    "message": "Interac refunds in Canada must be processed in person on a Stripe Terminal reader with the original card presented."
+  }
 }
 ```
 

@@ -11,6 +11,7 @@ Small TypeScript backend for the first phase of PowersOfZeroPOS.
 - Protected `GET /api/terminal/locations` endpoint
 - Protected `POST /api/terminal/locations` endpoint
 - Protected `POST /api/payments/create-intent` endpoint
+- Protected `POST /api/payments/refund` endpoint
 - Bearer token authentication using `POS_API_KEY`
 - Typed JSON success and error responses
 
@@ -19,6 +20,7 @@ Small TypeScript backend for the first phase of PowersOfZeroPOS.
 ```bash
 cd backend
 npm install
+npm test
 npm run typecheck
 ```
 

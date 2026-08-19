@@ -6,6 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "test": "tsx --test tests/**/*.test.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
 }
