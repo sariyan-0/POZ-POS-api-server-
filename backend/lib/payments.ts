@@ -82,12 +82,21 @@ export function validateCreatePaymentIntentInput(
 export function buildCreatePaymentIntentParams(
   input: CreatePaymentIntentInput,
 ): Stripe.PaymentIntentCreateParams {
-  return {
+  const params = {
     amount: input.amount,
     currency: input.currency,
-    capture_method: "manual",
     payment_method_types: ["card_present", "interac_present"],
+    payment_method_options: {
+      card_present: {
+        capture_method: "manual_preferred",
+      },
+    },
   };
+
+  // Stripe's current Terminal Canada docs require `manual_preferred` here
+  // when combining `card_present` with `interac_present`, but the installed
+  // stripe-node typings have not caught up with that field yet.
+  return params as Stripe.PaymentIntentCreateParams;
 }
 
 export function normalizePaymentIntent(

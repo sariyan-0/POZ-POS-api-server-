@@ -8,6 +8,7 @@ import {
   normalizePaymentIntent,
   validateCreatePaymentIntentInput,
 } from "../../lib/payments";
+import { getStripeErrorDiagnostics, logStripeError } from "../../lib/stripeErrors";
 import { getStripeClient } from "../../lib/stripe";
 
 export default async function handler(
@@ -31,8 +32,9 @@ export default async function handler(
 
   try {
     const stripe = getStripeClient();
+    const params = buildCreatePaymentIntentParams(validation.value);
     const paymentIntent = await stripe.paymentIntents.create(
-      buildCreatePaymentIntentParams(validation.value),
+      params,
       {
         idempotencyKey: validation.value.idempotencyKey,
       },
@@ -64,13 +66,34 @@ export default async function handler(
     }
 
     if (error instanceof Stripe.errors.StripeInvalidRequestError) {
+      const diagnostics = getStripeErrorDiagnostics(error);
+      logStripeError("payments.create_intent.invalid_request", error, {
+        amount: validation.value.amount,
+        currency: validation.value.currency,
+        paymentMethodTypes: ["card_present", "interac_present"],
+        cardPresentCaptureMethod: "manual_preferred",
+      });
+
       return sendError(
         res,
         400,
-        "BAD_REQUEST",
-        "Stripe rejected the PaymentIntent request.",
+        "STRIPE_PAYMENT_INTENT_ERROR",
+        diagnostics?.message ?? "Stripe rejected the PaymentIntent request.",
+        {
+          stripeCode: diagnostics?.code ?? null,
+          stripeDeclineCode: diagnostics?.declineCode ?? null,
+          stripeParam: diagnostics?.param ?? null,
+          requestId: diagnostics?.requestId ?? null,
+        },
       );
     }
+
+    logStripeError("payments.create_intent.unhandled", error, {
+      amount: validation.value.amount,
+      currency: validation.value.currency,
+      paymentMethodTypes: ["card_present", "interac_present"],
+      cardPresentCaptureMethod: "manual_preferred",
+    });
 
     return sendError(
       res,

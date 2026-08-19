@@ -3,6 +3,7 @@ import type { VercelResponse } from "@vercel/node";
 export type ApiErrorCode =
   | "BAD_REQUEST"
   | "METHOD_NOT_ALLOWED"
+  | "STRIPE_PAYMENT_INTENT_ERROR"
   | "STRIPE_UNAVAILABLE"
   | "SERVER_MISCONFIGURED"
   | "UNAUTHORIZED";
@@ -17,6 +18,10 @@ export type ApiFailure = {
   error: {
     code: ApiErrorCode;
     message: string;
+    stripeCode?: string | null;
+    stripeDeclineCode?: string | null;
+    stripeParam?: string | null;
+    requestId?: string | null;
   };
 };
 
@@ -36,12 +41,19 @@ export function sendError(
   statusCode: number,
   code: ApiErrorCode,
   message: string,
+  details?: {
+    stripeCode?: string | null;
+    stripeDeclineCode?: string | null;
+    stripeParam?: string | null;
+    requestId?: string | null;
+  },
 ): VercelResponse {
   return res.status(statusCode).json({
     success: false,
     error: {
       code,
       message,
+      ...(details ?? {}),
     },
   });
 }
