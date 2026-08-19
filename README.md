@@ -7,6 +7,7 @@ Small TypeScript backend for the first phase of PowersOfZeroPOS.
 - Vercel-compatible serverless backend in `backend/`
 - Protected `GET /api/health` endpoint
 - Protected `GET /api/stripe/status` endpoint
+- Protected `POST /api/terminal/connection-token` endpoint
 - Bearer token authentication using `POS_API_KEY`
 - Typed JSON success and error responses
 

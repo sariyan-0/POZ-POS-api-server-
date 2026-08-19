@@ -35,3 +35,14 @@ export async function verifyStripeConnection(): Promise<{
     livemode: balance.livemode,
   };
 }
+
+export async function createTerminalConnectionToken(): Promise<{
+  secret: string;
+}> {
+  const stripe = getStripeClient();
+  const connectionToken = await stripe.terminal.connectionTokens.create();
+
+  return {
+    secret: connectionToken.secret,
+  };
+}
