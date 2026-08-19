@@ -6,6 +6,7 @@ First backend version for the PowersOfZeroPOS mobile frontend.
 
 - Vercel-compatible TypeScript serverless API
 - `GET /api/health` protected by `Authorization: Bearer <POS_API_KEY>`
+- `GET /api/stripe/status` protected by `Authorization: Bearer <POS_API_KEY>`
 - Consistent typed JSON success and error responses
 - Minimal dependency footprint
 
@@ -15,6 +16,7 @@ Copy `.env.example` to `.env` and set:
 
 ```env
 POS_API_KEY=replace_with_a_long_random_secret
+STRIPE_SECRET_KEY=sk_test_replace_with_your_stripe_test_secret_key
 ```
 
 ## Local setup
@@ -50,6 +52,26 @@ Success response:
     "status": "ok",
     "service": "PowersOfZeroPOS",
     "apiVersion": 1
+  }
+}
+```
+
+### `GET /api/stripe/status`
+
+Requires:
+
+```http
+Authorization: Bearer <POS_API_KEY>
+```
+
+Success response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "connected": true,
+    "livemode": false
   }
 }
 ```

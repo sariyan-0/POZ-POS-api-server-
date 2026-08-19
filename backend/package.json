@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vercel/node": "^5.3.24"
+    "@vercel/node": "^5.3.24",
+    "stripe": "^18.5.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "typescript": "^5.9.2"
   }
 }
-

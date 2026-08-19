@@ -3,6 +3,7 @@ import type { VercelResponse } from "@vercel/node";
 export type ApiErrorCode =
   | "BAD_REQUEST"
   | "METHOD_NOT_ALLOWED"
+  | "STRIPE_UNAVAILABLE"
   | "SERVER_MISCONFIGURED"
   | "UNAUTHORIZED";
 
