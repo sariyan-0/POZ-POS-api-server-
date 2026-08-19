@@ -8,6 +8,8 @@ Small TypeScript backend for the first phase of PowersOfZeroPOS.
 - Protected `GET /api/health` endpoint
 - Protected `GET /api/stripe/status` endpoint
 - Protected `POST /api/terminal/connection-token` endpoint
+- Protected `GET /api/terminal/locations` endpoint
+- Protected `POST /api/terminal/locations` endpoint
 - Bearer token authentication using `POS_API_KEY`
 - Typed JSON success and error responses
 

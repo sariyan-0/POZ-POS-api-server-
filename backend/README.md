@@ -8,6 +8,8 @@ First backend version for the PowersOfZeroPOS mobile frontend.
 - `GET /api/health` protected by `Authorization: Bearer <POS_API_KEY>`
 - `GET /api/stripe/status` protected by `Authorization: Bearer <POS_API_KEY>`
 - `POST /api/terminal/connection-token` protected by `Authorization: Bearer <POS_API_KEY>`
+- `GET /api/terminal/locations` protected by `Authorization: Bearer <POS_API_KEY>`
+- `POST /api/terminal/locations` protected by `Authorization: Bearer <POS_API_KEY>`
 - Consistent typed JSON success and error responses
 - Minimal dependency footprint
 
@@ -92,6 +94,37 @@ Success response:
   "success": true,
   "data": {
     "secret": "<connection-token-secret>"
+  }
+}
+```
+
+### `GET /api/terminal/locations`
+
+Returns:
+
+```json
+{
+  "success": true,
+  "data": {
+    "locations": []
+  }
+}
+```
+
+### `POST /api/terminal/locations`
+
+Example request body:
+
+```json
+{
+  "displayName": "Main Location",
+  "address": {
+    "line1": "123 Example Street",
+    "line2": null,
+    "city": "Toronto",
+    "state": "ON",
+    "postalCode": "M1M 1M1",
+    "country": "CA"
   }
 }
 ```
