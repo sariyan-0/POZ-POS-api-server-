@@ -10,6 +10,7 @@ First backend version for the PowersOfZeroPOS mobile frontend.
 - `POST /api/terminal/connection-token` protected by `Authorization: Bearer <POS_API_KEY>`
 - `GET /api/terminal/locations` protected by `Authorization: Bearer <POS_API_KEY>`
 - `POST /api/terminal/locations` protected by `Authorization: Bearer <POS_API_KEY>`
+- `POST /api/payments/create-intent` protected by `Authorization: Bearer <POS_API_KEY>`
 - Consistent typed JSON success and error responses
 - Minimal dependency footprint
 
@@ -125,6 +126,35 @@ Example request body:
     "state": "ON",
     "postalCode": "M1M 1M1",
     "country": "CA"
+  }
+}
+```
+
+### `POST /api/payments/create-intent`
+
+Example request body:
+
+```json
+{
+  "amount": 100,
+  "currency": "cad",
+  "idempotencyKey": "sale-attempt-001"
+}
+```
+
+Success response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "paymentIntent": {
+      "id": "pi_...",
+      "clientSecret": "pi_..._secret_...",
+      "amount": 100,
+      "currency": "cad",
+      "status": "requires_payment_method"
+    }
   }
 }
 ```

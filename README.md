@@ -10,6 +10,7 @@ Small TypeScript backend for the first phase of PowersOfZeroPOS.
 - Protected `POST /api/terminal/connection-token` endpoint
 - Protected `GET /api/terminal/locations` endpoint
 - Protected `POST /api/terminal/locations` endpoint
+- Protected `POST /api/payments/create-intent` endpoint
 - Bearer token authentication using `POS_API_KEY`
 - Typed JSON success and error responses
 
