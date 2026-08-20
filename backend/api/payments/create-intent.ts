@@ -4,6 +4,10 @@ import { authenticatePosApiKey } from "../../lib/auth";
 import { applySecurityHeaders, requireMethod } from "../../lib/http";
 import { sendError, sendSuccess } from "../../lib/responses";
 import {
+  resolveOrCreateStripeCustomer,
+  validateCustomerReferenceInput,
+} from "../../lib/customers";
+import {
   buildCreatePaymentIntentParams,
   normalizePaymentIntent,
   validateCreatePaymentIntentInput,
@@ -25,14 +29,34 @@ export default async function handler(
     return;
   }
 
-  const validation = validateCreatePaymentIntentInput(req.body);
+  const customerValidation = validateCustomerReferenceInput(
+    (req.body as { customer?: unknown } | undefined)?.customer,
+  );
+  if (!customerValidation.ok) {
+    return sendError(res, 400, "BAD_REQUEST", customerValidation.message);
+  }
+
+  const validation = validateCreatePaymentIntentInput(req.body, customerValidation.value);
   if (!validation.ok) {
     return sendError(res, 400, "BAD_REQUEST", validation.message);
   }
 
   try {
     const stripe = getStripeClient();
-    const params = buildCreatePaymentIntentParams(validation.value);
+    const stripeCustomer = await resolveOrCreateStripeCustomer(
+      stripe,
+      validation.value.customer,
+    );
+    const paymentInput = stripeCustomer
+      ? {
+          ...validation.value,
+          customer: {
+            ...validation.value.customer,
+            stripeCustomerId: stripeCustomer.id,
+          },
+        }
+      : validation.value;
+    const params = buildCreatePaymentIntentParams(paymentInput);
     const paymentIntent = await stripe.paymentIntents.create(
       params,
       {
@@ -41,7 +65,7 @@ export default async function handler(
     );
 
     return sendSuccess(res, 200, {
-      paymentIntent: normalizePaymentIntent(paymentIntent),
+      ...normalizePaymentIntent(paymentIntent),
     });
   } catch (error) {
     if (error instanceof Stripe.errors.StripeAuthenticationError) {

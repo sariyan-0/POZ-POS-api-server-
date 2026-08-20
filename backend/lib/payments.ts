@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import type { CustomerReferenceInput } from "./customers";
 
 export const SUPPORTED_PAYMENT_CURRENCY = "cad";
 export const MAX_PAYMENT_AMOUNT = 1_000_000;
@@ -7,14 +8,15 @@ export type CreatePaymentIntentInput = {
   amount: number;
   currency: "cad";
   idempotencyKey: string;
+  customer?: CustomerReferenceInput;
 };
 
 export type NormalizedPaymentIntent = {
-  id: string;
+  paymentIntentId: string;
   clientSecret: string | null;
-  amount: number;
-  currency: string;
   status: Stripe.PaymentIntent.Status;
+  captureMethod: Stripe.PaymentIntent.CaptureMethod | null;
+  stripeCustomerId: string | null;
 };
 
 type ValidationResult =
@@ -32,6 +34,7 @@ function asTrimmedString(value: unknown): string | null {
 
 export function validateCreatePaymentIntentInput(
   body: unknown,
+  customer?: CustomerReferenceInput,
 ): ValidationResult {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, message: "Request body must be a JSON object." };
@@ -75,6 +78,7 @@ export function validateCreatePaymentIntentInput(
       amount,
       currency: SUPPORTED_PAYMENT_CURRENCY,
       idempotencyKey,
+      customer,
     },
   };
 }
@@ -86,6 +90,15 @@ export function buildCreatePaymentIntentParams(
     amount: input.amount,
     currency: input.currency,
     payment_method_types: ["card_present", "interac_present"],
+    ...(input.customer?.stripeCustomerId
+      ? { customer: input.customer.stripeCustomerId }
+      : {}),
+    metadata: {
+      ...(input.customer?.localCustomerId
+        ? { localCustomerId: input.customer.localCustomerId }
+        : {}),
+      ...(input.customer?.name ? { customerName: input.customer.name } : {}),
+    },
   };
 }
 
@@ -93,10 +106,11 @@ export function normalizePaymentIntent(
   paymentIntent: Stripe.PaymentIntent,
 ): NormalizedPaymentIntent {
   return {
-    id: paymentIntent.id,
+    paymentIntentId: paymentIntent.id,
     clientSecret: paymentIntent.client_secret,
-    amount: paymentIntent.amount,
-    currency: paymentIntent.currency,
     status: paymentIntent.status,
+    captureMethod: paymentIntent.capture_method,
+    stripeCustomerId:
+      typeof paymentIntent.customer === "string" ? paymentIntent.customer : null,
   };
 }
