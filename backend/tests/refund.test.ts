@@ -50,6 +50,14 @@ function createStripeClient(overrides?: {
     status: string;
     latest_charge: Record<string, unknown> | string | null;
   }>;
+  charge?: Partial<{
+    id: string;
+    status: string;
+    amount: number;
+    amount_refunded: number;
+    currency: string;
+    payment_method_details: Record<string, unknown>;
+  }>;
   refundResult?: Partial<{
     id: string;
     payment_intent: string | null;
@@ -73,6 +81,7 @@ function createStripeClient(overrides?: {
     status: "succeeded",
     latest_charge: {
       id: "ch_test_123",
+      status: "succeeded",
       amount: 1254,
       amount_refunded: 0,
       currency: "cad",
@@ -81,6 +90,18 @@ function createStripeClient(overrides?: {
       },
     },
     ...overrides?.paymentIntent,
+  };
+
+  const charge = {
+    id: "ch_test_123",
+    status: "succeeded",
+    amount: 1254,
+    amount_refunded: 0,
+    currency: "cad",
+    payment_method_details: {
+      type: "card_present",
+    },
+    ...overrides?.charge,
   };
 
   const refundResult = {
@@ -99,6 +120,9 @@ function createStripeClient(overrides?: {
           paymentIntentsRetrieveCalls.push(args);
           return paymentIntent;
         },
+      },
+      charges: {
+        retrieve: async () => charge,
       },
       refunds: {
         create: async (
@@ -162,6 +186,8 @@ test("refund endpoint creates a valid partial refund and forwards idempotency ke
       body: {
         paymentIntentId: "pi_123abc",
         amount: 200,
+        currency: "cad",
+        reason: "Customer request",
         idempotencyKey: "refund-attempt-001",
       },
     } as never,
@@ -187,6 +213,10 @@ test("refund endpoint creates a valid partial refund and forwards idempotency ke
       params: {
         payment_intent: "pi_123abc",
         amount: 200,
+        metadata: {
+          source: "PowersOfZeroPOS",
+          reason: "Customer request",
+        },
       },
       options: {
         idempotencyKey: "refund-attempt-001",
@@ -208,6 +238,8 @@ test("refund endpoint forwards the same idempotency key on repeated retries", as
     body: {
       paymentIntentId: "pi_123abc",
       amount: 200,
+      currency: "cad",
+      reason: "Customer request",
       idempotencyKey: "refund-attempt-retry-001",
     },
   };
@@ -227,6 +259,10 @@ test("refund endpoint forwards the same idempotency key on repeated retries", as
       params: {
         payment_intent: "pi_123abc",
         amount: 200,
+        metadata: {
+          source: "PowersOfZeroPOS",
+          reason: "Customer request",
+        },
       },
       options: {
         idempotencyKey: "refund-attempt-retry-001",
@@ -236,6 +272,10 @@ test("refund endpoint forwards the same idempotency key on repeated retries", as
       params: {
         payment_intent: "pi_123abc",
         amount: 200,
+        metadata: {
+          source: "PowersOfZeroPOS",
+          reason: "Customer request",
+        },
       },
       options: {
         idempotencyKey: "refund-attempt-retry-001",
@@ -256,6 +296,8 @@ test("refund endpoint rejects invalid PaymentIntent identifiers", async () => {
       },
       body: {
         paymentIntentId: "bad_id",
+        currency: "cad",
+        reason: "Customer request",
         idempotencyKey: "refund-attempt-002",
       },
     } as never,
@@ -286,6 +328,8 @@ test("refund endpoint rejects invalid amount types", async () => {
       body: {
         paymentIntentId: "pi_123abc",
         amount: "200",
+        currency: "cad",
+        reason: "Customer request",
         idempotencyKey: "refund-attempt-003",
       },
     } as never,
@@ -316,6 +360,8 @@ test("refund endpoint rejects non-positive amounts", async () => {
       body: {
         paymentIntentId: "pi_123abc",
         amount: 0,
+        currency: "cad",
+        reason: "Customer request",
         idempotencyKey: "refund-attempt-004",
       },
     } as never,
@@ -357,6 +403,8 @@ test("refund endpoint returns safe Stripe rejection details", async () => {
       body: {
         paymentIntentId: "pi_123abc",
         amount: 200,
+        currency: "cad",
+        reason: "Customer request",
         idempotencyKey: "refund-attempt-005",
       },
     } as never,
@@ -384,6 +432,7 @@ test("refund endpoint blocks remote Interac refunds", async () => {
     paymentIntent: {
       latest_charge: {
         id: "ch_test_interac",
+        status: "succeeded",
         amount: 1254,
         amount_refunded: 0,
         currency: "cad",
@@ -404,6 +453,8 @@ test("refund endpoint blocks remote Interac refunds", async () => {
       },
       body: {
         paymentIntentId: "pi_123abc",
+        currency: "cad",
+        reason: "Customer request",
         idempotencyKey: "refund-attempt-006",
       },
     } as never,
@@ -411,14 +462,91 @@ test("refund endpoint blocks remote Interac refunds", async () => {
   );
   setStripeClientForTesting(null);
 
-  assert.equal(res.statusCode, 409);
+  assert.equal(res.statusCode, 400);
   assert.deepEqual(res.jsonBody, {
     success: false,
     error: {
       code: "IN_PERSON_REFUND_REQUIRED",
-      message:
-        "Interac refunds in Canada must be processed in person on a Stripe Terminal reader with the original card presented.",
+      message: "This payment requires an in-person Terminal refund.",
     },
   });
   assert.equal(stripeMock.refundsCreateCalls.length, 0);
+});
+
+test("refund endpoint supports charge-based refunds when paymentIntentId is omitted", async () => {
+  process.env.POS_API_KEY = "test-pos-key";
+  const stripeMock = createStripeClient({
+    refundResult: {
+      payment_intent: null,
+      amount: 100,
+    },
+  });
+  setStripeClientForTesting(stripeMock.client as never);
+
+  const res = createResponse();
+  await refundHandler(
+    {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-pos-key",
+      },
+      body: {
+        chargeId: "ch_123abc",
+        amount: 100,
+        currency: "cad",
+        reason: "Customer request",
+        note: "optional text",
+        idempotencyKey: "refund-attempt-charge-001",
+      },
+    } as never,
+    res.response as never,
+  );
+  setStripeClientForTesting(null);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(stripeMock.refundsCreateCalls, [
+    {
+      params: {
+        charge: "ch_123abc",
+        amount: 100,
+        metadata: {
+          source: "PowersOfZeroPOS",
+          reason: "Customer request",
+          note: "optional text",
+        },
+      },
+      options: {
+        idempotencyKey: "refund-attempt-charge-001",
+      },
+    },
+  ]);
+});
+
+test("refund endpoint rejects requests missing both paymentIntentId and chargeId", async () => {
+  process.env.POS_API_KEY = "test-pos-key";
+
+  const res = createResponse();
+  await refundHandler(
+    {
+      method: "POST",
+      headers: {
+        authorization: "Bearer test-pos-key",
+      },
+      body: {
+        amount: 100,
+        currency: "cad",
+        reason: "Customer request",
+      },
+    } as never,
+    res.response as never,
+  );
+
+  assert.equal(res.statusCode, 400);
+  assert.deepEqual(res.jsonBody, {
+    success: false,
+    error: {
+      code: "BAD_REQUEST",
+      message: "Either paymentIntentId or chargeId is required.",
+    },
+  });
 });

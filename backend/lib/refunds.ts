@@ -1,9 +1,13 @@
 import Stripe from "stripe";
 
 export type CreateRefundInput = {
-  paymentIntentId: string;
+  paymentIntentId?: string;
+  chargeId?: string;
   amount?: number;
-  idempotencyKey: string;
+  currency: string;
+  reason: string;
+  note?: string;
+  idempotencyKey?: string;
 };
 
 export type NormalizedRefund = {
@@ -21,8 +25,8 @@ type ValidationResult =
 type RefundEligibility =
   | {
       ok: true;
-      paymentIntent: Stripe.PaymentIntent;
-      latestCharge: Stripe.Charge;
+      paymentIntent?: Stripe.PaymentIntent;
+      charge: Stripe.Charge;
       refundableAmount: number;
     }
   | {
@@ -50,6 +54,10 @@ function isLikelyPaymentIntentId(value: string): boolean {
   return /^pi_[A-Za-z0-9]+$/.test(value);
 }
 
+function isLikelyChargeId(value: string): boolean {
+  return /^ch_[A-Za-z0-9]+$/.test(value);
+}
+
 export function validateCreateRefundInput(body: unknown): ValidationResult {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, message: "Request body must be a JSON object." };
@@ -57,20 +65,42 @@ export function validateCreateRefundInput(body: unknown): ValidationResult {
 
   const payload = body as Record<string, unknown>;
   const paymentIntentId = asTrimmedString(payload.paymentIntentId);
-  if (!paymentIntentId) {
-    return { ok: false, message: "paymentIntentId is required." };
+  const chargeId = asTrimmedString(payload.chargeId);
+  if (!paymentIntentId && !chargeId) {
+    return {
+      ok: false,
+      message: "Either paymentIntentId or chargeId is required.",
+    };
   }
 
-  if (!isLikelyPaymentIntentId(paymentIntentId)) {
-    return { ok: false, message: "paymentIntentId must be a valid Stripe PaymentIntent ID." };
+  if (paymentIntentId && !isLikelyPaymentIntentId(paymentIntentId)) {
+    return {
+      ok: false,
+      message: "paymentIntentId must be a valid Stripe PaymentIntent ID.",
+    };
   }
 
-  const idempotencyKey = asTrimmedString(payload.idempotencyKey);
-  if (!idempotencyKey) {
-    return { ok: false, message: "idempotencyKey is required." };
+  if (chargeId && !isLikelyChargeId(chargeId)) {
+    return {
+      ok: false,
+      message: "chargeId must be a valid Stripe Charge ID.",
+    };
   }
 
-  if (idempotencyKey.length > 255) {
+  const currencyValue = asTrimmedString(payload.currency);
+  const currency = currencyValue ? currencyValue.toLowerCase() : undefined;
+  if (!currency) {
+    return { ok: false, message: "currency is required." };
+  }
+
+  const reason = asTrimmedString(payload.reason);
+  if (!reason) {
+    return { ok: false, message: "reason is required." };
+  }
+
+  const note = asTrimmedString(payload.note) ?? undefined;
+  const idempotencyKey = asTrimmedString(payload.idempotencyKey) ?? undefined;
+  if (idempotencyKey && idempotencyKey.length > 255) {
     return { ok: false, message: "idempotencyKey is too long." };
   }
 
@@ -79,7 +109,11 @@ export function validateCreateRefundInput(body: unknown): ValidationResult {
     return {
       ok: true,
       value: {
-        paymentIntentId,
+        paymentIntentId: paymentIntentId ?? undefined,
+        chargeId: chargeId ?? undefined,
+        currency,
+        reason,
+        note,
         idempotencyKey,
       },
     };
@@ -100,8 +134,12 @@ export function validateCreateRefundInput(body: unknown): ValidationResult {
   return {
     ok: true,
     value: {
-      paymentIntentId,
+      paymentIntentId: paymentIntentId ?? undefined,
+      chargeId: chargeId ?? undefined,
       amount,
+      currency,
+      reason,
+      note,
       idempotencyKey,
     },
   };
@@ -119,24 +157,64 @@ function isInteracCharge(charge: Stripe.Charge): boolean {
   return charge.payment_method_details?.type === "interac_present";
 }
 
+async function getChargeForRefund(
+  stripe: Stripe,
+  input: CreateRefundInput,
+): Promise<
+  | { ok: true; paymentIntent?: Stripe.PaymentIntent; charge: Stripe.Charge }
+  | {
+      ok: false;
+      code: "PAYMENT_NOT_FOUND";
+      message: string;
+    }
+> {
+  if (input.paymentIntentId) {
+    const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId, {
+      expand: ["latest_charge"],
+    });
+
+    const latestCharge = asCharge(paymentIntent.latest_charge);
+    if (!latestCharge) {
+      return {
+        ok: false,
+        code: "PAYMENT_NOT_FOUND",
+        message: "PaymentIntent does not have a captured charge to refund.",
+      };
+    }
+
+    return {
+      ok: true,
+      paymentIntent,
+      charge: latestCharge,
+    };
+  }
+
+  if (!input.chargeId) {
+    return {
+      ok: false,
+      code: "PAYMENT_NOT_FOUND",
+      message: "Unable to determine which charge to refund.",
+    };
+  }
+
+  const charge = await stripe.charges.retrieve(input.chargeId);
+
+  return {
+    ok: true,
+    charge,
+  };
+}
+
 export async function getRefundEligibility(
   stripe: Stripe,
   input: CreateRefundInput,
 ): Promise<RefundEligibility> {
-  const paymentIntent = await stripe.paymentIntents.retrieve(input.paymentIntentId, {
-    expand: ["latest_charge"],
-  });
-
-  const latestCharge = asCharge(paymentIntent.latest_charge);
-  if (!latestCharge) {
-    return {
-      ok: false,
-      code: "PAYMENT_NOT_FOUND",
-      message: "PaymentIntent does not have a captured charge to refund.",
-    };
+  const target = await getChargeForRefund(stripe, input);
+  if (!target.ok) {
+    return target;
   }
 
-  if (paymentIntent.status !== "succeeded") {
+  if (target.paymentIntent && target.paymentIntent.status !== "succeeded") {
     return {
       ok: false,
       code: "PAYMENT_NOT_COMPLETED",
@@ -144,25 +222,43 @@ export async function getRefundEligibility(
     };
   }
 
-  if (isInteracCharge(latestCharge)) {
+  if (target.charge.status !== "succeeded") {
+    return {
+      ok: false,
+      code: "PAYMENT_NOT_COMPLETED",
+      message: "Only succeeded payments can be refunded.",
+    };
+  }
+
+  if (target.charge.currency.toLowerCase() !== input.currency) {
+    return {
+      ok: false,
+      code: "REFUND_AMOUNT_EXCEEDED",
+      message: "currency must match the original payment currency.",
+      refundableAmount: target.charge.amount - target.charge.amount_refunded,
+      currency: target.charge.currency,
+    };
+  }
+
+  if (isInteracCharge(target.charge)) {
     return {
       ok: false,
       code: "IN_PERSON_REFUND_REQUIRED",
       message:
-        "Interac refunds in Canada must be processed in person on a Stripe Terminal reader with the original card presented.",
-      refundableAmount: latestCharge.amount - latestCharge.amount_refunded,
-      currency: latestCharge.currency,
+        "This payment requires an in-person Terminal refund.",
+      refundableAmount: target.charge.amount - target.charge.amount_refunded,
+      currency: target.charge.currency,
     };
   }
 
-  const refundableAmount = latestCharge.amount - latestCharge.amount_refunded;
+  const refundableAmount = target.charge.amount - target.charge.amount_refunded;
   if (refundableAmount <= 0) {
     return {
       ok: false,
       code: "REFUND_AMOUNT_EXCEEDED",
       message: "Payment has no remaining refundable amount.",
       refundableAmount,
-      currency: latestCharge.currency,
+      currency: target.charge.currency,
     };
   }
 
@@ -172,14 +268,14 @@ export async function getRefundEligibility(
       code: "REFUND_AMOUNT_EXCEEDED",
       message: "amount exceeds the remaining refundable amount.",
       refundableAmount,
-      currency: latestCharge.currency,
+      currency: target.charge.currency,
     };
   }
 
   return {
     ok: true,
-    paymentIntent,
-    latestCharge,
+    paymentIntent: target.paymentIntent,
+    charge: target.charge,
     refundableAmount,
   };
 }
@@ -188,8 +284,15 @@ export function buildCreateRefundParams(
   input: CreateRefundInput,
 ): Stripe.RefundCreateParams {
   return {
-    payment_intent: input.paymentIntentId,
+    ...(input.paymentIntentId
+      ? { payment_intent: input.paymentIntentId }
+      : { charge: input.chargeId as string }),
     ...(typeof input.amount === "number" ? { amount: input.amount } : {}),
+    metadata: {
+      source: "PowersOfZeroPOS",
+      reason: input.reason,
+      ...(input.note ? { note: input.note } : {}),
+    },
   };
 }
 

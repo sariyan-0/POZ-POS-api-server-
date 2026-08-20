@@ -39,7 +39,7 @@ export default async function handler(
       if (eligibility.code === "IN_PERSON_REFUND_REQUIRED") {
         return sendError(
           res,
-          409,
+          400,
           "IN_PERSON_REFUND_REQUIRED",
           eligibility.message,
         );
@@ -87,6 +87,7 @@ export default async function handler(
       const diagnostics = getStripeErrorDiagnostics(error);
       logStripeError("payments.refund.invalid_request", error, {
         paymentIntentId: validation.value.paymentIntentId,
+        chargeId: validation.value.chargeId ?? null,
         amount: validation.value.amount ?? null,
       });
 
@@ -106,6 +107,7 @@ export default async function handler(
 
     logStripeError("payments.refund.unhandled", error, {
       paymentIntentId: validation.value.paymentIntentId,
+      chargeId: validation.value.chargeId ?? null,
       amount: validation.value.amount ?? null,
     });
 
